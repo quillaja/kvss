@@ -43,7 +43,7 @@ class KVPair(Base):
     Represents the data, a string-string key-value pair. The 'owner' field 
     should point back to the APIKey that owns this kv-pair.
     '''
-    owner = pw.ForeignKeyField(rel_model=APIKey, related_name='pairs')
+    owner = pw.ForeignKeyField(model=APIKey, backref='pairs')
     key = pw.CharField()
     value = pw.TextField()
 
