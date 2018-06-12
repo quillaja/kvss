@@ -9,11 +9,16 @@ app = flask.Flask(__name__)
 
 
 @app.after_request
-def add_no_coors(resp):
+def add_coors(resp):
     '''
-    adds the 'no cors' header to every response
+    adds the 'cors' header(s) to every response.
+    PS: FUCK CORS.
     '''
     resp.headers['Access-Control-Allow-Origin'] = '*'
+    resp.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT'
+    resp.headers['Access-Control-Allow-Headers'] = '*'
+    resp.headers['Content-Type'] = 'application/json'
+
     return resp
 
 
