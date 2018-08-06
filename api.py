@@ -96,7 +96,6 @@ def handle_put_val(api_key, key):
     try:
         user = APIKey.get(APIKey.key == api_key)
     except APIKey.DoesNotExist:
-        print(api_key)
         flask.abort(404)
 
     try:
