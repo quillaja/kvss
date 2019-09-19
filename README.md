@@ -8,7 +8,7 @@ Simple and easy to use key-value store.
         { 
             "name": <string>,
             "email": <string>,
-            "note": <string
+            "note": <string>
         }
 
         returns json
