@@ -35,11 +35,11 @@ func (app *Application) setupRoutes() {
 			default:
 				http.NotFound(w, req)
 			}
-			w.Header().Add("Content-Type", "application/json")
 		})))
 
 	app.Routes.Handle("/", addHeaders(
 		http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			w.Header().Set("Content-Type", "text/html")
 			w.Write([]byte(`<html><body>see <a href="https://github.com/quillaja/kvss">https://github.com/quillaja/kvss</a></body></html>`))
 		})))
 }
@@ -50,6 +50,7 @@ func addHeaders(h http.Handler) http.Handler {
 		w.Header().Add("Access-Control-Allow-Origin", "*")
 		w.Header().Add("Access-Control-Allow-Methods", "GET, POST, PUT")
 		w.Header().Add("Access-Control-Allow-Headers", "*")
+		w.Header().Add("Content-Type", "application/json")
 		h.ServeHTTP(w, req)
 	})
 }
