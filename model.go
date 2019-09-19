@@ -22,6 +22,7 @@ func generateKey() (key string) {
 	return
 }
 
+// User represents a user in table "apikey".
 type User struct {
 	ID       uint      `json:"-"`
 	Created  time.Time `json:"created"`
@@ -32,11 +33,12 @@ type User struct {
 	Note     string    `json:"note"`
 }
 
+// Pair represents a key-value pair in table "kvpair".
 type Pair struct {
 	ID       uint      `json:"-"`
 	Created  time.Time `json:"created"`
 	Modified time.Time `json:"modified"`
-	OwnerID  uint      `db:"owner_id" json:"-"`
+	OwnerID  uint      `json:"-" db:"owner_id"` // FK to apikey (User)
 	Key      string    `json:"key"`
 	Value    string    `json:"value"`
 }

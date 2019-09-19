@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// Configures the serve mux for the application.
 func (app *Application) setupRoutes() {
 	app.Routes = http.NewServeMux()
 
@@ -34,6 +35,7 @@ func (app *Application) setupRoutes() {
 		})))
 }
 
+// Applies standard headers to all responses.
 func addHeaders(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Add("Access-Control-Allow-Origin", "*")
@@ -44,10 +46,13 @@ func addHeaders(h http.Handler) http.Handler {
 	})
 }
 
+// A type for simpler JSONifing of arbitary data.
 type dict map[string]interface{}
 
+// Handler to create a new API key.
 func (app *Application) newAPIKey(w http.ResponseWriter, req *http.Request) {
 
+	// get user name, email, and note from req body
 	var user User
 	dec := json.NewDecoder(req.Body)
 	defer req.Body.Close()
@@ -57,10 +62,12 @@ func (app *Application) newAPIKey(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 
+	// generate key and set time fields
 	user.Key = generateKey()
 	user.Created = time.Now().UTC()
 	user.Modified = time.Now().UTC()
 
+	// insert
 	_, err = app.DB.Exec(insertUser,
 		user.Created,
 		user.Modified,
@@ -74,22 +81,20 @@ func (app *Application) newAPIKey(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// return response
 	enc := json.NewEncoder(w)
-	err = enc.Encode(dict{
-		"name":    user.Name,
-		"email":   user.Email,
-		"note":    user.Note,
-		"apikey":  user.Key,
-		"created": user.Created,
-	})
+	enc.SetIndent("", " ")
+	err = enc.Encode(user)
 	if err != nil {
 		app.Log.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
 
+// returns a JSON array of key-value pairs associated with the given apikey.
 func (app *Application) listAllForKey(apikey string) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
+		// get user
 		var user User
 		err := app.DB.Get(&user, getUser, apikey)
 		if err != nil {
@@ -98,6 +103,7 @@ func (app *Application) listAllForKey(apikey string) http.HandlerFunc {
 			return
 		}
 
+		// get kv pair data
 		pairs := []Pair{}
 		err = app.DB.Select(&pairs, selectPairs, user.ID)
 		if err != nil {
@@ -106,6 +112,7 @@ func (app *Application) listAllForKey(apikey string) http.HandlerFunc {
 			return
 		}
 
+		// write response
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", " ")
 		err = enc.Encode(pairs)
@@ -116,8 +123,10 @@ func (app *Application) listAllForKey(apikey string) http.HandlerFunc {
 	}
 }
 
+// returns a single key-value pair for the given apikey and key.
 func (app *Application) getValue(apikey, key string) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
+		// get user
 		var user User
 		err := app.DB.Get(&user, getUser, apikey)
 		if err != nil {
@@ -126,6 +135,7 @@ func (app *Application) getValue(apikey, key string) http.HandlerFunc {
 			return
 		}
 
+		// get pair
 		var pair Pair
 		err = app.DB.Get(&pair, getPair, user.ID, key)
 		if err != nil {
@@ -134,12 +144,13 @@ func (app *Application) getValue(apikey, key string) http.HandlerFunc {
 			return
 		}
 
+		// write response
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", " ")
 		err = enc.Encode(dict{
 			"key":      pair.Key,
 			"value":    pair.Value,
-			"apikey":   user.Key,
+			"apikey":   user.Key, // could probably get rid of this
 			"created":  pair.Created,
 			"modified": pair.Modified,
 		})
@@ -150,8 +161,10 @@ func (app *Application) getValue(apikey, key string) http.HandlerFunc {
 	}
 }
 
+// will update or create the key-value pair for the given apikey and key.
 func (app *Application) putValue(apikey, key string) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
+		// get user
 		var user User
 		err := app.DB.Get(&user, getUser, apikey)
 		if err != nil {
@@ -160,6 +173,8 @@ func (app *Application) putValue(apikey, key string) http.HandlerFunc {
 			return
 		}
 
+		// get pair
+		// set a flag to "create" if the db says the key isn't found
 		var pair Pair
 		update := true
 		err = app.DB.Get(&pair, getPair, user.ID, key)
@@ -167,7 +182,7 @@ func (app *Application) putValue(apikey, key string) http.HandlerFunc {
 		case err == sql.ErrNoRows:
 			// add new value
 			update = false
-			pair.Created = time.Now()
+			pair.Created = time.Now().UTC()
 			pair.OwnerID = user.ID
 			pair.Key = key
 		case err != nil:
@@ -176,6 +191,7 @@ func (app *Application) putValue(apikey, key string) http.HandlerFunc {
 			return
 		}
 
+		// attempt to read the value from the request body
 		body := dict{}
 		dec := json.NewDecoder(req.Body)
 		defer req.Body.Close()
@@ -186,6 +202,8 @@ func (app *Application) putValue(apikey, key string) http.HandlerFunc {
 			return
 		}
 
+		// value must be a string and less than a certain size to be accepted
+		// by the API.
 		value, ok := body["value"].(string)
 		if !ok || len(value) > maxValueSize {
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -195,7 +213,7 @@ func (app *Application) putValue(apikey, key string) http.HandlerFunc {
 		pair.Value = value
 		pair.Modified = time.Now().UTC()
 
-		// var res sql.Result
+		// do the update or create
 		switch update {
 		case true:
 			// UPDATE
@@ -217,6 +235,7 @@ func (app *Application) putValue(apikey, key string) http.HandlerFunc {
 			return
 		}
 
+		// write the response
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", " ")
 		err = enc.Encode(dict{

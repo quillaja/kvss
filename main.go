@@ -14,7 +14,8 @@ import (
 )
 
 func main() {
-	dbpath := flag.String("db", "", "path to sqlite3 database (required)")
+	dbpath := flag.String("db", "kvss.db", "path to sqlite3 database")
+	mode := flag.String("mode", FCGI, "mode to run in (http or fcgi)")
 	flag.Parse()
 
 	if *dbpath == "" {
@@ -22,38 +23,57 @@ func main() {
 		os.Exit(1)
 	}
 
-	NewApplication(*dbpath).run(HTTP)
+	NewApplication(*dbpath).run(*mode)
 }
 
+// Application holds the important state for the app.
 type Application struct {
-	Routes *http.ServeMux
-	DB     *sqlx.DB
-	Log    *log.Logger
+	Routes  *http.ServeMux
+	DB      *sqlx.DB
+	Log     *log.Logger
+	logfile *os.File
 }
 
+// NewApplication creates a new application using the sqlite3 db.
 func NewApplication(dbPath string) *Application {
-	db, err := sqlx.Open("sqlite3", dbPath)
+	app := &Application{}
+
+	file, err := os.OpenFile("error.log", os.O_CREATE|os.O_APPEND|os.O_RDWR, 0644)
 	kill(err)
+	app.Log = log.New(file, "", log.LstdFlags)
+	app.logfile = file
 
-	app := &Application{DB: db}
+	db, err := sqlx.Open("sqlite3", dbPath)
+	if err != nil {
+		app.Log.Println(err)
+		os.Exit(1)
+	}
+	app.DB = db
+
 	app.setupRoutes()
-
-	app.Log = log.New(os.Stderr, "", log.LstdFlags)
 
 	return app
 }
 
+// run starts the server.
 func (app *Application) run(mode string) {
 	defer app.DB.Close()
+	defer app.logfile.Close()
 
 	switch mode {
 	case FCGI:
 		err := fcgi.Serve(nil, app.Routes)
-		kill(err)
+		if err != nil {
+			app.Log.Println(err)
+			os.Exit(1)
+		}
 
 	case HTTP:
 		err := http.ListenAndServe(":8000", app.Routes)
-		kill(err)
+		if err != nil {
+			app.Log.Println(err)
+			os.Exit(1)
+		}
 	}
 }
 
@@ -63,6 +83,7 @@ func kill(err error) {
 	}
 }
 
+// used for application run "mode"
 const (
 	FCGI = "fcgi"
 	HTTP = "http"
